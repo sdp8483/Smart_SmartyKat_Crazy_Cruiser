@@ -1,0 +1,4 @@
+(sym_lib_table
+  (lib (name "Padauk")(type "Legacy")(uri "${KIPRJMOD}/lib_sch/padauk/Padauk.lib")(options "")(descr ""))
+  (lib (name "pl_sensor")(type "KiCad")(uri "${KIPRJMOD}/lib_sch/pl_sensor/pl_sensor.kicad_sym")(options "")(descr ""))
+)

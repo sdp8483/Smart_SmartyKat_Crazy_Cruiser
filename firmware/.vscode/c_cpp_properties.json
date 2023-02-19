@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [
+                "PFS154",
+                "__SDCC_pdk14",
+                "DEVICE=PFS154",
+                "F_CPU = 55000",
+                "TARGET_VDD_MV = 3000",
+                "TARGET_VDD = 3.0"
+            ],
+            "compilerPath": "/usr/bin/sdcc",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "ms-vscode.makefile-tools",
+            "configurationProvider": "ms-vscode.makefile-tools"
+        }
+    ],
+    "version": 4
+}
