@@ -1,6 +1,8 @@
 /* Smart SmartyKat Crazy Cruiser
  * Target Device: PFS154-S08
- *
+ * 
+ * Sam Perry 2023
+ * github.com/sdp8483/Smart_SmartyKat_Crazy_Cruiser
  */
 
 #include <stdint.h>
@@ -8,7 +10,7 @@
 #include "auto_sysclock.h"
 
 // Pin Defines - all pins are on port A
-#define VIBE_SENSOR_PIN       0     /* vibration sensor input pin, used to wake from deep sleep */
+#define VIBE_PIN              0     /* vibration sensor input pin, used to wake from deep sleep */
 #define MOTOR_PIN             4     /* motor control pin */
 #define LED_PIN               3     /* LED output pin */
 
@@ -18,17 +20,44 @@
 #define MOTOR_ON()            PA &= ~(1 << MOTOR_PIN)
 #define MOTOR_OFF()           PA |= (1 << MOTOR_PIN)
 
+void toy_active(void);
+void toy_sleep(void);
+
 // Service Interrupt Requests
 void interrupt(void) __interrupt(0) {
   if (INTRQ & INTRQ_T16) {
     INTRQ &= ~INTRQ_T16;          /* mark T16 interrupt request serviced */
     INTEN &= ~INTRQ_T16;          /* disable T16 interrupt */
+    T16M = T16M_CLK_DISABLE;      /* disable T16 timer */
+    toy_sleep();
   }
 
   if (INTRQ & INTRQ_PA0) {
     INTRQ &= ~INTRQ_PA0;          /* mark PA0 interrupt request serviced */
     INTEN &= ~INTEN_PA0;          /* disable pin wakeup interrupt */
+    PADIER &= ~(1 << VIBE_PIN);   /* disable pin wake function */
+    toy_active();
   }
+}
+
+void toy_active() {
+  LED_ON();
+  MOTOR_ON();
+  T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV64 | T16M_INTSRC_13BIT);
+                                  /* use 55kHz clock divided by 64, trigger when bit 13 goes from 0 to 1 */
+  T16C = 0;                       /* set timer count to 0 */
+  INTEN |= INTEN_T16;             /* enable T16 interrupt */
+  INTRQ = 0;                      /* reset interrupts */
+  __stopexe();                    /* light sleep, ILRC remains on */
+}
+
+void toy_sleep() {
+  LED_OFF();
+  MOTOR_OFF();
+  PADIER |= (1 << VIBE_PIN);      /* enable pin wake function */
+  INTEN |= INTEN_PA0;             /* enable wakeup pin */
+  INTRQ = 0;                      /* reset interrupts */
+  __stopsys();                    /* go to deep sleep */
 }
 
 // Main program
@@ -38,39 +67,52 @@ void main() {
   // Initialize hardware
   PADIER = 0;                       /* on reset all pins are set as wake pins, setting register to 0 to disable */
 
-  // Set Vibration Sensor pin as input and wakeup
-  PAC &= ~(1 << VIBE_SENSOR_PIN);   /* set as input (all pins are input by default, setting to make sure) */
-  PADIER |= (1 << VIBE_SENSOR_PIN); /* enable as wakeup/interrupt pin */
-  PAPH |= (1 << VIBE_SENSOR_PIN);   /* enable pullup resistor on pin */
+  // Set Vibration Sensor pin as input
+  PAC &= ~(1 << VIBE_PIN);   /* set as input (all pins are input by default, setting to make sure) */
+  PAPH |= (1 << VIBE_PIN);   /* enable pullup resistor on pin */
 
   // Set output pins
   PAC |= (1 << MOTOR_PIN);          /* set motor control pin as output */
   PAC |= (1 << LED_PIN);            /* set led pin as output */
 
+  // setup interrupts
+  INTEN = 0;                        /* disable all interrupts, on reset state is not defined in datasheet */
+  INTEGS |= INTEGS_PA0_FALLING;     /* trigger when switch closes and pulls pin to ground */
   __engint();                       /* enable global interrupts */
- 
+  /* Some notes and thoughts about interrupts on the PFS154
+   *  Section 5.7 of the datasheet contains information about the interrupt controller.
+   *  When an interrupt is triggered global interrupts are disabled, ie __disgint() is automaticaly called.
+   *  CPU steps into ISR function above and executes code there. When done __engint() is automaticaly called and 
+   *  code execution starts in the main loop where it left off. Confusingly the datasheet says that even if INTEN = 0 
+   *  INTRQ can still be triggered by the interrupt source. So the peripheral or port should be further disabled to prevent
+   *  triggering. */
+  
+  toy_sleep();
   // Main processing loop
   while (1) {
     // Setup Timer16, when timer interrupts CPU goes to sleep
-    // __disgint();                    /* disable global interrupts */
-    T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV64 | T16M_INTSRC_13BIT);
-                                    /* use 55kHz clock divided by 64, trigger when bit 13 goes from 0 to 1 */
-    T16C = 0;                       /* set timer count to 0 */
-    LED_ON();
-    MOTOR_ON();
-    INTEN |= INTEN_T16;             /* enable T16 interrupt */
-    INTRQ = 0;                      /* reset interrupts */
-    // __engint();                     /* enable global interrupts */
-    __stopexe();                    /* light sleep, ILRC remains on */
+    /* Timer16 is setup to count up using ILRC clock diveded down to get the desired toy run time .
+     * The LED and motor are turned on, cpu goes into light sleep where main code execution is stopped but ILRC is active.
+     * When timer bit changes from 0 to 1 an interrupt is called and the CPU wakes, executes code below call to light sleep.
+     * T16 is disabled, motor and LED are turned off. PA0 is set to wake the CPU from deep no clock sleep. 
+     * CPU is set to sleep, ILCR is off. A falling edge on PA0 will wake CPU and start main loop execution at beginning. */
+
+    // LED_ON();
+    // MOTOR_ON();
+    // T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV64 | T16M_INTSRC_13BIT);
+    //                                 /* use 55kHz clock divided by 64, trigger when bit 13 goes from 0 to 1 */
+    // T16C = 0;                       /* set timer count to 0 */
+    // INTEN |= INTEN_T16;             /* enable T16 interrupt */
+    // INTRQ = 0;                      /* reset interrupts */
+    // __stopexe();                    /* light sleep, ILRC remains on */
     /* Toy is active while T16 counts up. On interrupt code resumes execution below */
-    // __disgint();                    /* disable global interrupts */
-    T16M = T16M_CLK_DISABLE;        /* disable T16 timer */
-    LED_OFF();
-    MOTOR_OFF();
-    INTEN |= INTEN_PA0;             /* enable wakeup pin */
-    INTRQ = 0;                      /* reset interrupts */
-    // __engint();                     /* enable global interrupts */
-    __stopsys();                    /* go to deep sleep */
+
+    // LED_OFF();
+    // MOTOR_OFF();
+    // PADIER |= (1 << VIBE_PIN);      /* enable pin wake function */
+    // INTEN |= INTEN_PA0;             /* enable wakeup pin */
+    // INTRQ = 0;                      /* reset interrupts */
+    // __stopsys();                    /* go to deep sleep */
     /* Toy is in deep sleep. Only wakes on interrupt from PA0 triggered by vibration switch, code resumes execution below */
   }
 }
