@@ -20,44 +20,37 @@
 #define MOTOR_ON()            PA &= ~(1 << MOTOR_PIN)
 #define MOTOR_OFF()           PA |= (1 << MOTOR_PIN)
 
-void toy_active(void);
-void toy_sleep(void);
-
 // Service Interrupt Requests
 void interrupt(void) __interrupt(0) {
   if (INTRQ & INTRQ_T16) {
     INTRQ &= ~INTRQ_T16;          /* mark T16 interrupt request serviced */
     INTEN &= ~INTRQ_T16;          /* disable T16 interrupt */
     T16M = T16M_CLK_DISABLE;      /* disable T16 timer */
-    toy_sleep();
+    /* setup toy to go to deep low power sleep */
+    LED_OFF();
+    MOTOR_OFF();
+    PADIER |= (1 << VIBE_PIN);      /* enable pin wake function */
+    INTEN |= INTEN_PA0;             /* enable wakeup pin */
+    INTRQ = 0;                      /* reset interrupts */
+    __stopsys();                    /* go to deep sleep */
+    /* Toy is in deep sleep. Only wakes on interrupt from PA0 triggered by vibration switch */
   }
 
   if (INTRQ & INTRQ_PA0) {
     INTRQ &= ~INTRQ_PA0;          /* mark PA0 interrupt request serviced */
     INTEN &= ~INTEN_PA0;          /* disable pin wakeup interrupt */
     PADIER &= ~(1 << VIBE_PIN);   /* disable pin wake function */
-    toy_active();
+    /* setup toy to go active */
+    LED_ON();
+    MOTOR_ON();
+    T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV64 | T16M_INTSRC_13BIT);
+                                /* use 55kHz clock divided by 64, trigger when bit 13 goes from 0 to 1 */
+    T16C = 0;                       /* set timer count to 0 */
+    INTEN |= INTEN_T16;             /* enable T16 interrupt */
+    INTRQ = 0;                      /* reset interrupts */
+    __stopexe();                    /* light sleep, ILRC remains on */
+    /* Toy is active while T16 counts up */
   }
-}
-
-void toy_active() {
-  LED_ON();
-  MOTOR_ON();
-  T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV64 | T16M_INTSRC_13BIT);
-                                  /* use 55kHz clock divided by 64, trigger when bit 13 goes from 0 to 1 */
-  T16C = 0;                       /* set timer count to 0 */
-  INTEN |= INTEN_T16;             /* enable T16 interrupt */
-  INTRQ = 0;                      /* reset interrupts */
-  __stopexe();                    /* light sleep, ILRC remains on */
-}
-
-void toy_sleep() {
-  LED_OFF();
-  MOTOR_OFF();
-  PADIER |= (1 << VIBE_PIN);      /* enable pin wake function */
-  INTEN |= INTEN_PA0;             /* enable wakeup pin */
-  INTRQ = 0;                      /* reset interrupts */
-  __stopsys();                    /* go to deep sleep */
 }
 
 // Main program
@@ -87,33 +80,15 @@ void main() {
    *  INTRQ can still be triggered by the interrupt source. So the peripheral or port should be further disabled to prevent
    *  triggering. */
   
-  toy_sleep();
-  // Main processing loop
+  /* setup pin wakeup interrupt */
+  PADIER |= (1 << VIBE_PIN);      /* enable pin wake function */
+  INTEN |= INTEN_PA0;             /* enable wakeup pin */
+  INTRQ = 0;                      /* reset interrupts */
+  __stopsys();                    /* go to deep sleep */
+
+  // Main processing loop, should never reach this
   while (1) {
-    // Setup Timer16, when timer interrupts CPU goes to sleep
-    /* Timer16 is setup to count up using ILRC clock diveded down to get the desired toy run time .
-     * The LED and motor are turned on, cpu goes into light sleep where main code execution is stopped but ILRC is active.
-     * When timer bit changes from 0 to 1 an interrupt is called and the CPU wakes, executes code below call to light sleep.
-     * T16 is disabled, motor and LED are turned off. PA0 is set to wake the CPU from deep no clock sleep. 
-     * CPU is set to sleep, ILCR is off. A falling edge on PA0 will wake CPU and start main loop execution at beginning. */
-
-    // LED_ON();
-    // MOTOR_ON();
-    // T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV64 | T16M_INTSRC_13BIT);
-    //                                 /* use 55kHz clock divided by 64, trigger when bit 13 goes from 0 to 1 */
-    // T16C = 0;                       /* set timer count to 0 */
-    // INTEN |= INTEN_T16;             /* enable T16 interrupt */
-    // INTRQ = 0;                      /* reset interrupts */
-    // __stopexe();                    /* light sleep, ILRC remains on */
-    /* Toy is active while T16 counts up. On interrupt code resumes execution below */
-
-    // LED_OFF();
-    // MOTOR_OFF();
-    // PADIER |= (1 << VIBE_PIN);      /* enable pin wake function */
-    // INTEN |= INTEN_PA0;             /* enable wakeup pin */
-    // INTRQ = 0;                      /* reset interrupts */
-    // __stopsys();                    /* go to deep sleep */
-    /* Toy is in deep sleep. Only wakes on interrupt from PA0 triggered by vibration switch, code resumes execution below */
+    /* everything happens in ISR */
   }
 }
 
