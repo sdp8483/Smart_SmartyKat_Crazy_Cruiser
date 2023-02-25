@@ -30,6 +30,7 @@ void interrupt(void) __interrupt(0) {
     LED_OFF();
     MOTOR_OFF();
     PADIER |= (1 << VIBE_PIN);      /* enable pin wake function */
+    PBDIER = 0;
     INTEN |= INTEN_PA0;             /* enable wakeup pin */
     INTRQ = 0;                      /* reset interrupts */
     __stopsys();                    /* go to deep sleep */
@@ -59,6 +60,7 @@ void main() {
 
   // Initialize hardware
   PADIER = 0;                       /* on reset all pins are set as wake pins, setting register to 0 to disable */
+  PBDIER = 0;                       /* there is no port B on the -S08 but without setting this to 0 the uC will wake unexpectedly */
 
   // Set Vibration Sensor pin as input
   PAC &= ~(1 << VIBE_PIN);   /* set as input (all pins are input by default, setting to make sure) */
