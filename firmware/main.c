@@ -76,6 +76,7 @@ void main() {
         __disgint();                  /* disable global interrupts */
         
         LED_OFF();
+        PWMG1C = 0;                   /* disable PWM on motor */
         MOTOR_OFF();
 
         INTEN = 0;                    /* disable all interrupts */
@@ -106,7 +107,14 @@ void main() {
         INTRQ = 0;                    /* reset interrupts */
 
         LED_ON();
-        MOTOR_ON();
+        // MOTOR_ON();
+        PWMG1DTL = 0;                 /* Duty Value Low, stays 0 */
+        PWMG1DTH = 50;                /* Duty Value High, this sets the duty cycle */
+        PWMG1CUBL = (uint8_t)((100 & 0x3) << 6);
+        PWMG1CUBH = (uint8_t)((100 >> 2));
+                                      /* count to 100 so that duty value high is in percent */
+        PWMG1C = (uint8_t)(PWMG1C_ENABLE | PWMG1C_CLK_SYSCLK | PWMG1C_OUT_PA4);
+                                      /* enable PWMG1 with sysclk (ILRC), output on PA4 */
 
         fsm_state = ACTIVE;
 
