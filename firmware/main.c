@@ -23,8 +23,8 @@
 
 // Toggle the motor on and off to give toy some character using profiles
 #define MAX_TICKS             64    /* go to sleep after this many ticks */
-volatile uint8_t tick = 0;          /* tick count, number of T16 interrupts since starting T16 */
-#define NUM_PROFILES          12    /* number of profiles, a new one is played each wake event to give more character */
+uint8_t tick = 0;                   /* tick count, number of T16 interrupts since starting T16 */
+#define NUM_PROFILES          8     /* number of profiles, a new one is played each wake event to give more character */
 uint64_t profile[NUM_PROFILES] = {0b1100110011001111111111000000000010101010101010101010111111111111,
                                   0b1111111111111111111111111111111111111111111111111111111111111111,
                                   0b1100110011001100110011001100110011111111111111111111111111111111,
@@ -32,11 +32,7 @@ uint64_t profile[NUM_PROFILES] = {0b11001100110011111111110000000000101010101010
                                   0b0101010101010101010101010101010101010101010101010101010101010101,
                                   0b1111001110011100111001110011100111001110011100111001110011100111,
                                   0b1110111000000111000000000000000011111111111111111111111111111111,
-                                  0b1110101010101010000000001111111101010101000000001111111101010101,
-                                  0b1000001110010000001100001110100101100100110111110011110110101100, 
-                                  0b0100010110110010111001111000101001111010100100101101000110010000,
-                                  0b0010111000011101111111101110100010100011111111110001101111111000,
-                                  0b1010110110110100110110110101100001110010100111110100100110001110};
+                                  0b1110101010101010000000001111111101010101000000001111111101010101};
                                     /* motor will be turned on when bit is 1 and off when bit is 0 
                                        this playback profile is backwards */
 uint8_t profile_i = 0;              /* profile number to playback, increments each wake */
@@ -68,7 +64,6 @@ void interrupt(void) __interrupt(0) {
 
   if (INTRQ & INTRQ_T16) {          /* timer has expired */
     INTRQ &= ~INTRQ_T16;            /* mark T16 interrupt request serviced */
-    tick++;                         /* increment tick */
     T16C = 0;                       /* reset timer to zero */
   }
 }
@@ -121,15 +116,17 @@ void main() {
         __disgint();                /* disable global interrupts */
         INTEN = 0;                  /* disable all interrupts */
         PADIER = 0;                 /* disable wakeup pin */
+        PBDIER = 0;                 /* disable port B wake pins to be sure */
 
         T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV1 | T16M_INTSRC_12BIT);
                                     /* use 55kHz clock divided by 1, trigger when bit N goes from 0 to 1 
-                                       T16 has a period of about 0.1 seconds, this is used as the tick count */
+                                     * T16 has a period of about 0.1 seconds, this is used as the tick count 
+                                     * Tick count determins playback of profile for motor */
         T16C = 0;                   /* set timer count to 0 */
         INTEN |= INTEN_T16;         /* enable T16 interrupt */
         INTRQ = 0;                  /* reset interrupts */
 
-        tick = 0;
+        tick = 0;                   /* reset tick count to reset profile playback */
         fsm_state = ACTIVE;
         break;
       
@@ -139,11 +136,13 @@ void main() {
           profile_i = (profile_i > (NUM_PROFILES - 1)) ? 0 : profile_i;
                                     /* constrain profile_i */
           fsm_state = GOTO_SLEEP;   /* change state, go to sleep */
-          break;                    /* dont execute remainder of code */
+          break;                    /* don't execute remainder of code */
         }
 
+        tick++;                     /* increment tick */
+
         // get motor state in profile playback based on tick number
-        if (((profile[0] >> tick) & 0b01) == 1) { 
+        if (((profile[profile_i] >> tick) & 0b01) == 1) { 
           MOTOR_ON();
         } else {
           MOTOR_OFF();
