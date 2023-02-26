@@ -18,8 +18,8 @@
 #define LED_ON()              PA |= (1 << LED_PIN)
 #define LED_OFF()             PA &= ~(1 << LED_PIN)
 #define LED_TOGGLE()          PA ^= (1 << LED_PIN)
-#define MOTOR_ON()            PA &= ~(1 << MOTOR_PIN)
-#define MOTOR_OFF()           PA |= (1 << MOTOR_PIN)
+#define MOTOR_ON()            PA |= (1 << MOTOR_PIN)
+#define MOTOR_OFF()           PA &= ~(1 << MOTOR_PIN)
 
 // Toggle the motor on and off to give toy some character using profiles
 #define MAX_TICKS             64    /* go to sleep after this many ticks */
