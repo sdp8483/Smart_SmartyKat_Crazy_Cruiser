@@ -22,7 +22,7 @@
 #define MOTOR_OFF()           PA |= (1 << MOTOR_PIN)
 
 // Toggle the motor on and off to give toy some character
-#define MAX_TICKS             32    /* go to sleep after this many ticks */
+#define MAX_TICKS             64    /* go to sleep after this many ticks */
 volatile uint8_t tick = 0;          /* tick count, number of T16 interrupts since starting T16 */
 // uint32_t profile = 0b11111111010101010000111100110011;
 uint64_t profile = 0b1100110011001111111111000000000010101010101010101010111111111111;
@@ -109,9 +109,9 @@ void main() {
         INTEN = 0;                    /* disable all interrupts */
         PADIER = 0;                   /* disable wakeup pin */
 
-        T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV1 | T16M_INTSRC_15BIT);
-                                      /* use 55kHz clock divided by 4, trigger when bit N goes from 0 to 1 
-                                         T16 has a period of about 0.6 seconds, this is used as the tick count */
+        T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV1 | T16M_INTSRC_12BIT);
+                                      /* use 55kHz clock divided by 1, trigger when bit N goes from 0 to 1 
+                                         T16 has a period of about 0.1 seconds, this is used as the tick count */
         T16C = 0;                     /* set timer count to 0 */
         INTEN |= INTEN_T16;           /* enable T16 interrupt */
         INTRQ = 0;                    /* reset interrupts */
