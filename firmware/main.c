@@ -17,8 +17,16 @@
 // Output Pin Fuction Defines
 #define LED_ON()              PA |= (1 << LED_PIN)
 #define LED_OFF()             PA &= ~(1 << LED_PIN)
+#define LED_TOGGLE()          PA ^= (1 << LED_PIN)
 #define MOTOR_ON()            PA &= ~(1 << MOTOR_PIN)
 #define MOTOR_OFF()           PA |= (1 << MOTOR_PIN)
+
+// Toggle the motor on and off to give toy some character
+#define MAX_TICKS             32    /* go to sleep after this many ticks */
+volatile uint8_t tick = 0;          /* tick count, number of T16 interrupts since starting T16 */
+uint32_t profile = 0b11111111010101010000111100110011;
+                                    /* motor will be turned on when bit is 1 and off when bit is 0 
+                                       this playback profile is backwards */
 
 // State Machine
 typedef enum {
@@ -47,7 +55,9 @@ void interrupt(void) __interrupt(0) {
 
   if (INTRQ & INTRQ_T16) {        /* timer has expired */
     INTRQ &= ~INTRQ_T16;          /* mark T16 interrupt request serviced */
-    fsm_state = GOTO_SLEEP;       /* change state */
+    tick++;                       /* increment tick */
+    T16C = 0;                     /* reset timer to zero */
+    // fsm_state = GOTO_SLEEP;       /* change state */
   }
 }
 
@@ -76,7 +86,6 @@ void main() {
         __disgint();                  /* disable global interrupts */
         
         LED_OFF();
-        PWMG1C = 0;                   /* disable PWM on motor */
         MOTOR_OFF();
 
         INTEN = 0;                    /* disable all interrupts */
@@ -100,29 +109,38 @@ void main() {
         INTEN = 0;                    /* disable all interrupts */
         PADIER = 0;                   /* disable wakeup pin */
 
-        T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV64 | T16M_INTSRC_13BIT);
-                                      /* use 55kHz clock divided by 64, trigger when bit N goes from 0 to 1 */
+        T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV4 | T16M_INTSRC_14BIT);
+                                      /* use 55kHz clock divided by 4, trigger when bit N goes from 0 to 1 
+                                         T16 has a period of about 1.2 seconds, this is used as the tick count */
         T16C = 0;                     /* set timer count to 0 */
         INTEN |= INTEN_T16;           /* enable T16 interrupt */
         INTRQ = 0;                    /* reset interrupts */
 
-        LED_ON();
+        // LED_ON();
         // MOTOR_ON();
-        PWMG1DTL = 0;                 /* Duty Value Low, stays 0 */
-        PWMG1DTH = 50;                /* Duty Value High, this sets the duty cycle */
-        PWMG1CUBL = (uint8_t)((100 & 0x3) << 6);
-        PWMG1CUBH = (uint8_t)((100 >> 2));
-                                      /* count to 100 so that duty value high is in percent */
-        PWMG1C = (uint8_t)(PWMG1C_ENABLE | PWMG1C_CLK_SYSCLK | PWMG1C_OUT_PA4);
-                                      /* enable PWMG1 with sysclk (ILRC), output on PA4 */
 
         fsm_state = ACTIVE;
 
         break;
       
       case ACTIVE:
+        if (tick >= MAX_TICKS) {      /* done playing, time for sleep */
+          fsm_state = GOTO_SLEEP;
+          break;
+        }
+
+        // get motor state in profile playback based on tick number
+        if (((profile >> tick) && 0b01) == 1) { 
+          MOTOR_ON();
+        } else {
+          MOTOR_OFF();
+        }
+
+        LED_TOGGLE();
+
         __engint();                   /* enable global interrupts */
         __stopexe();                  /* light sleep, ILRC remains on */
+
         break;
 
       default:
