@@ -118,7 +118,7 @@ void main() {
         PADIER = 0;                 /* disable wakeup pin */
         PBDIER = 0;                 /* disable port B wake pins to be sure */
 
-        T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV1 | T16M_INTSRC_12BIT);
+        T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV1 | T16M_INTSRC_13BIT);
                                     /* use 55kHz clock divided by 1, trigger when bit N goes from 0 to 1 
                                      * T16 is used as the tick count to determins playback of profile for motor */
         T16C = 0;                   /* set timer count to 0 */
