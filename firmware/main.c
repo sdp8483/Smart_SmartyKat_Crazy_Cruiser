@@ -50,7 +50,7 @@ typedef enum {
 fsm_states_t fsm_state = GOTO_SLEEP;
 
 // Function Prototypes
-void settling_delay(void);          /* use timer2 as delay to wait for vibe sensor to settle */
+void settling_delay(void);          /* use timer3 as delay to wait for vibe sensor to settle */
 
 // Service Interrupt Requests
 void interrupt(void) __interrupt(0) {
@@ -143,8 +143,8 @@ void main() {
         INTEN |= INTEN_T16;         /* enable T16 interrupt */
         INTRQ = 0;                  /* reset interrupts */
 
+        // use timer2 to toggle LED
         TM2C = (uint8_t)(TM2C_CLK_ILRC | TM2C_OUT_PA3 | TM2C_MODE_PERIOD);
-                                    /* setup timer2 to toggle LED */
         TM2S = (uint8_t)(TM2S_PRESCALE_DIV4 | TM2S_SCALE_DIV3);
         TM2B = 250;                 /* set timer frequency to 6.8Hz */
         INTEN |= INTEN_TM2;         /* enable timer2 interrupt */
@@ -186,20 +186,20 @@ void main() {
     }
   }
 }
-// Use timer2 to delay while vibration sensor settles
+// Use timer3 to delay while vibration sensor settles
 void settling_delay(void) {
-  TM2C = (uint8_t)(TM2C_CLK_ILRC | TM2C_OUT_DISABLE | TM2C_MODE_PERIOD);
-  TM2S = (uint8_t)(TM2S_PWM_RES_8BIT | TM2S_PRESCALE_DIV4 | TM2S_SCALE_DIV13);
+  TM3C = (uint8_t)(TM3C_CLK_ILRC | TM3C_OUT_DISABLE | TM3C_MODE_PERIOD);
+  TM3S = (uint8_t)(TM3S_PWM_RES_8BIT | TM3S_PRESCALE_DIV4 | TM3S_SCALE_DIV13);
                               /* setup for 0.256sec period */
-  TM2B = 250;                 /* timer2 counts up to this value before interrupting */
-  INTEN |= INTEN_TM2;         /* enable interrupt for timer 2 */
+  TM3B = 250;                 /* timer3 counts up to this value before interrupting */
+  INTEN |= INTEN_TM3;         /* enable interrupt for timer3 */
   __engint();                 /* enable global interrupts */
   LED_ON();                   /* to see that delay is happening */
   __stopexe();                /* light sleep for a delay */
   LED_OFF();                  /* delay is done */
 
   __disgint();                /* disable global interrupts */
-  TM2C = TM2C_CLK_DISABLE;    /* disable timer */
+  TM3C = TM3C_CLK_DISABLE;    /* disable timer */
 }
 
 // Startup code - Setup/calibrate system clock
