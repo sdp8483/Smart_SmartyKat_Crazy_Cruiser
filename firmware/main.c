@@ -57,7 +57,6 @@ void interrupt(void) __interrupt(0) {
     INTRQ &= ~INTRQ_T16;          /* mark T16 interrupt request serviced */
     tick++;                       /* increment tick */
     T16C = 0;                     /* reset timer to zero */
-    // fsm_state = GOTO_SLEEP;       /* change state */
   }
 }
 
@@ -116,9 +115,7 @@ void main() {
         INTEN |= INTEN_T16;           /* enable T16 interrupt */
         INTRQ = 0;                    /* reset interrupts */
 
-        // LED_ON();
-        // MOTOR_ON();
-
+        tick = 0;
         fsm_state = ACTIVE;
 
         break;
