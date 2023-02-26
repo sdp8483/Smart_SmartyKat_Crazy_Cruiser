@@ -66,6 +66,10 @@ void interrupt(void) __interrupt(0) {
     INTRQ &= ~INTRQ_T16;            /* mark T16 interrupt request serviced */
     T16C = 0;                       /* reset timer to zero */
   }
+
+  if (INTRQ & INTRQ_TM2) {          /* timer 2 delay has expired */
+    INTRQ &= ~INTRQ_TM2;            /* mark T2 interrupt request serviced */
+  }
 }
 
 // Main program
@@ -95,6 +99,20 @@ void main() {
         T16M = T16M_CLK_DISABLE;    /* turn off tick timer */
         LED_OFF();
         MOTOR_OFF();
+
+        TM2C = (uint8_t)(TM2C_CLK_ILRC | TM2C_OUT_DISABLE | TM2C_MODE_PERIOD);
+                                    /* use timer2 to generate a delay to allow vibe switch to settle */
+        TM2S = (uint8_t)(TM2S_PWM_RES_8BIT | TM2S_PRESCALE_DIV4 | TM2S_SCALE_DIV13);
+                                    /* setup for 0.149sec period */
+        TM2B = 250;                 /* timer2 counts up to this value before interrupting */
+        INTEN |= INTEN_TM2;         /* enable interrupt for timer 2 */
+        __engint();                 /* enable global interrupts */
+        LED_ON();                   /* to see that delay is happening */
+        __stopexe();                /* light sleep for a delay */
+        LED_OFF();                  /* delay is done */
+
+        __disgint();                /* disable global interrupts */
+        TM2C = TM2C_CLK_DISABLE;    /* disable timer */
 
         INTEN = 0;                  /* disable all interrupts */
         PADIER = (1 << VIBE_PIN);   /* enable only one wakeup pin */
