@@ -130,7 +130,7 @@ void main() {
         }
 
         // get motor state in profile playback based on tick number
-        if (((profile >> tick) && 0b01) == 1) { 
+        if (((profile >> tick) & 0b01) == 1) { 
           MOTOR_ON();
         } else {
           MOTOR_OFF();
