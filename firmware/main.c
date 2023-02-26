@@ -66,6 +66,10 @@ void interrupt(void) __interrupt(0) {
     INTRQ &= ~INTRQ_T16;            /* mark T16 interrupt request serviced */
     T16C = 0;                       /* reset timer to zero */
   }
+
+  if (INTRQ & INTRQ_TM2) {
+    INTRQ &= ~INTRQ_TM2;
+  }
 }
 
 // Main program
@@ -95,6 +99,7 @@ void main() {
         LED_OFF();
         MOTOR_OFF();
         T16M = T16M_CLK_DISABLE;    /* turn off timer */
+        TM2C = TM2C_CLK_DISABLE;
 
         INTEN = 0;                  /* disable all interrupts */
         PADIER = (1 << VIBE_PIN);   /* enable only one wakeup pin */
@@ -126,6 +131,10 @@ void main() {
         INTEN |= INTEN_T16;         /* enable T16 interrupt */
         INTRQ = 0;                  /* reset interrupts */
 
+        TM2C = (uint8_t)(TM2C_CLK_ILRC | TM2C_OUT_PA3 | TM2C_MODE_PERIOD);
+        TM2S = (uint8_t)(TM2S_PWM_RES_8BIT | TM2S_PRESCALE_DIV16 | TM2S_SCALE_DIV2);
+        TM2B = 100;
+
         tick = 0;                   /* reset tick count to reset profile playback */
         fsm_state = ACTIVE;
         break;
@@ -148,7 +157,7 @@ void main() {
           MOTOR_OFF();
         }
 
-        LED_TOGGLE();
+        // LED_TOGGLE();
 
         __engint();                 /* enable global interrupts */
         __stopexe();                /* light sleep, ILRC remains on */
