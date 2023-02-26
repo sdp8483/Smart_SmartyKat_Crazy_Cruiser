@@ -21,13 +21,25 @@
 #define MOTOR_ON()            PA &= ~(1 << MOTOR_PIN)
 #define MOTOR_OFF()           PA |= (1 << MOTOR_PIN)
 
-// Toggle the motor on and off to give toy some character
+// Toggle the motor on and off to give toy some character using profiles
 #define MAX_TICKS             64    /* go to sleep after this many ticks */
 volatile uint8_t tick = 0;          /* tick count, number of T16 interrupts since starting T16 */
-// uint32_t profile = 0b11111111010101010000111100110011;
-uint64_t profile = 0b1100110011001111111111000000000010101010101010101010111111111111;
+#define NUM_PROFILES          12    /* number of profiles, a new one is played each wake event to give more character */
+uint64_t profile[NUM_PROFILES] = {0b1100110011001111111111000000000010101010101010101010111111111111,
+                                  0b1111111111111111111111111111111111111111111111111111111111111111,
+                                  0b1100110011001100110011001100110011111111111111111111111111111111,
+                                  0b1111111111001111001111001111001111001111001111001111001111001111,
+                                  0b0101010101010101010101010101010101010101010101010101010101010101,
+                                  0b1111001110011100111001110011100111001110011100111001110011100111,
+                                  0b1110111000000111000000000000000011111111111111111111111111111111,
+                                  0b1110101010101010000000001111111101010101000000001111111101010101,
+                                  0b1000001110010000001100001110100101100100110111110011110110101100, 
+                                  0b0100010110110010111001111000101001111010100100101101000110010000,
+                                  0b0010111000011101111111101110100010100011111111110001101111111000,
+                                  0b1010110110110100110110110101100001110010100111110100100110001110};
                                     /* motor will be turned on when bit is 1 and off when bit is 0 
                                        this playback profile is backwards */
+uint8_t profile_i = 0;              /* profile number to playback, increments each wake */
 
 // State Machine
 typedef enum {
@@ -49,15 +61,15 @@ void interrupt(void) __interrupt(0) {
    *  INTRQ can still be triggered by the interrupt source. So the peripheral or port should be further disabled to prevent
    *  triggering. */
 
-  if (INTRQ & INTRQ_PA0) {        /* wake pin was pulled low */
-    INTRQ &= ~INTRQ_PA0;          /* mark PA0 interrupt request serviced */
-    fsm_state = WAKEUP;           /* change state */
+  if (INTRQ & INTRQ_PA0) {          /* wake pin was pulled low */
+    INTRQ &= ~INTRQ_PA0;            /* mark PA0 interrupt request serviced */
+    fsm_state = WAKEUP;             /* change state */
   }
 
-  if (INTRQ & INTRQ_T16) {        /* timer has expired */
-    INTRQ &= ~INTRQ_T16;          /* mark T16 interrupt request serviced */
-    tick++;                       /* increment tick */
-    T16C = 0;                     /* reset timer to zero */
+  if (INTRQ & INTRQ_T16) {          /* timer has expired */
+    INTRQ &= ~INTRQ_T16;            /* mark T16 interrupt request serviced */
+    tick++;                         /* increment tick */
+    T16C = 0;                       /* reset timer to zero */
   }
 }
 
@@ -70,8 +82,8 @@ void main() {
   PBDIER = 0;                       /* there is no port B on the -S08 but without setting this to 0 the uC will wake unexpectedly */
 
   // Set Vibration Sensor pin as input
-  PAC &= ~(1 << VIBE_PIN);   /* set as input (all pins are input by default, setting to make sure) */
-  PAPH |= (1 << VIBE_PIN);   /* enable pullup resistor on pin */
+  PAC &= ~(1 << VIBE_PIN);          /* set as input (all pins are input by default, setting to make sure) */
+  PAPH |= (1 << VIBE_PIN);          /* enable pullup resistor on pin */
 
   // Set output pins
   PAC |= (1 << MOTOR_PIN);          /* set motor control pin as output */
@@ -83,52 +95,55 @@ void main() {
   while (1) {
     switch (fsm_state) {
       case GOTO_SLEEP:
-        __disgint();                  /* disable global interrupts */
+        __disgint();                /* disable global interrupts */
         
         LED_OFF();
         MOTOR_OFF();
+        T16M = T16M_CLK_DISABLE;    /* turn off timer */
 
-        INTEN = 0;                    /* disable all interrupts */
-        PADIER = (1 << VIBE_PIN);     /* enable only one wakeup pin */
-        PBDIER = 0;                   /* make sure port B does not wake */
-        INTEGS |= INTEGS_PA0_FALLING; /* trigger when switch closes and pulls pin to ground */
-        INTEN |= INTEN_PA0;           /* enable interrupt on wake pin */
-        INTRQ = 0;                    /* reset interrupts */
+        INTEN = 0;                  /* disable all interrupts */
+        PADIER = (1 << VIBE_PIN);   /* enable only one wakeup pin */
+        PBDIER = 0;                 /* make sure port B does not wake */
+        INTEGS |= INTEGS_PA0_FALLING;
+                                    /* trigger when switch closes and pulls pin to ground */
+        INTEN |= INTEN_PA0;         /* enable interrupt on wake pin */
+        INTRQ = 0;                  /* reset interrupts */
 
-        fsm_state = SLEEP;            /* change state */
-
+        fsm_state = SLEEP;          /* change state */
         break;
 
       case SLEEP:
-        __engint();                   /* enable global interrupts */
-        __stopsys();                  /* go to deep sleep */
+        __engint();                 /* enable global interrupts */
+        __stopsys();                /* go to deep sleep */
         break;
       
       case WAKEUP:
-        __disgint();                  /* disable global interrupts */
-        INTEN = 0;                    /* disable all interrupts */
-        PADIER = 0;                   /* disable wakeup pin */
+        __disgint();                /* disable global interrupts */
+        INTEN = 0;                  /* disable all interrupts */
+        PADIER = 0;                 /* disable wakeup pin */
 
         T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV1 | T16M_INTSRC_12BIT);
-                                      /* use 55kHz clock divided by 1, trigger when bit N goes from 0 to 1 
-                                         T16 has a period of about 0.1 seconds, this is used as the tick count */
-        T16C = 0;                     /* set timer count to 0 */
-        INTEN |= INTEN_T16;           /* enable T16 interrupt */
-        INTRQ = 0;                    /* reset interrupts */
+                                    /* use 55kHz clock divided by 1, trigger when bit N goes from 0 to 1 
+                                       T16 has a period of about 0.1 seconds, this is used as the tick count */
+        T16C = 0;                   /* set timer count to 0 */
+        INTEN |= INTEN_T16;         /* enable T16 interrupt */
+        INTRQ = 0;                  /* reset interrupts */
 
         tick = 0;
         fsm_state = ACTIVE;
-
         break;
       
       case ACTIVE:
-        if (tick >= MAX_TICKS) {      /* done playing, time for sleep */
-          fsm_state = GOTO_SLEEP;
-          break;
+        if (tick >= MAX_TICKS) {    /* done playing? time for sleep */
+          profile_i++;              /* play next profile on wake */
+          profile_i = (profile_i > (NUM_PROFILES - 1)) ? 0 : profile_i;
+                                    /* constrain profile_i */
+          fsm_state = GOTO_SLEEP;   /* change state, go to sleep */
+          break;                    /* dont execute remainder of code */
         }
 
         // get motor state in profile playback based on tick number
-        if (((profile >> tick) & 0b01) == 1) { 
+        if (((profile[0] >> tick) & 0b01) == 1) { 
           MOTOR_ON();
         } else {
           MOTOR_OFF();
@@ -136,12 +151,12 @@ void main() {
 
         LED_TOGGLE();
 
-        __engint();                   /* enable global interrupts */
-        __stopexe();                  /* light sleep, ILRC remains on */
-
+        __engint();                 /* enable global interrupts */
+        __stopexe();                /* light sleep, ILRC remains on */
         break;
 
       default:
+        fsm_state = GOTO_SLEEP;     /* something is wrong, go to sleep */
         break;
     }
   }
