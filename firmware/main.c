@@ -43,7 +43,6 @@ typedef enum {
   GOTO_SLEEP,                       /* prepare to sleep */
   SLEEP,                            /* toy is in deep sleep */
   WAKEUP,                           /* toy was awaken from deep sleep */
-  // ACTIVE,                           /* toy is active, LED and motor on */
   TOCK,                             /* T16 calling for next profile point */
   LIGHT_SLEEP,                      /* light sleep between ticks */
 } fsm_states_t;
