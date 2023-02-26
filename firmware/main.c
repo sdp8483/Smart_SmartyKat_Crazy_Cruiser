@@ -147,8 +147,6 @@ void main() {
           break;                    /* don't execute remainder of code */
         }
 
-        tick++;                     /* increment tick */
-
         // get motor state in profile playback based on tick number
         if (((profile[profile_i] >> tick) & 0b01) == 1) { 
           MOTOR_ON();
@@ -157,6 +155,8 @@ void main() {
         }
 
         LED_TOGGLE();
+
+        tick++;                     /* increment tick */
 
         __engint();                 /* enable global interrupts */
         __stopexe();                /* light sleep, ILRC remains on */
