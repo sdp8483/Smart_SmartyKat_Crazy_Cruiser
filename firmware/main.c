@@ -66,10 +66,6 @@ void interrupt(void) __interrupt(0) {
     INTRQ &= ~INTRQ_T16;            /* mark T16 interrupt request serviced */
     T16C = 0;                       /* reset timer to zero */
   }
-
-  if (INTRQ & INTRQ_TM2) {          /* timer 2 has counted to TM2B */
-    INTRQ &= ~INTRQ_TM2;            /* mark TM2 interrupt request serviced */
-  }
 }
 
 // Main program
@@ -97,7 +93,6 @@ void main() {
         __disgint();                /* disable global interrupts */
         
         T16M = T16M_CLK_DISABLE;    /* turn off tick timer */
-        TM2C = TM2C_CLK_DISABLE;    /* turn off LED toggle */
         LED_OFF();
         MOTOR_OFF();
 
@@ -125,17 +120,10 @@ void main() {
 
         T16M = (uint8_t)(T16M_CLK_ILRC | T16M_CLK_DIV1 | T16M_INTSRC_12BIT);
                                     /* use 55kHz clock divided by 1, trigger when bit N goes from 0 to 1 
-                                     * T16 has a period of about 0.1 seconds, this is used as the tick count 
-                                     * Tick count determins playback of profile for motor */
+                                     * T16 is used as the tick count to determins playback of profile for motor */
         T16C = 0;                   /* set timer count to 0 */
         INTEN |= INTEN_T16;         /* enable T16 interrupt */
         INTRQ = 0;                  /* reset interrupts */
-
-        TM2C = (uint8_t)(TM2C_CLK_ILRC | TM2C_OUT_PA3 | TM2C_MODE_PERIOD);
-                                    /* use timer2 to toggle LED, ILRC as clock, period mode outputs 50% duty cycle */
-        TM2S = (uint8_t)(TM2S_PWM_RES_8BIT | TM2S_PRESCALE_DIV16 | TM2S_SCALE_DIV2);
-                                    /* tm2 8bit resolution, divide clock by 16 and then scale by 2 */
-        TM2B = 100;                 /* set count to value, LED toggles at 5.7Hz */
 
         tick = 0;                   /* reset tick count to reset profile playback */
         fsm_state = ACTIVE;
@@ -158,6 +146,8 @@ void main() {
         } else {
           MOTOR_OFF();
         }
+
+        LED_TOGGLE();
 
         __engint();                 /* enable global interrupts */
         __stopexe();                /* light sleep, ILRC remains on */
