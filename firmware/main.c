@@ -18,8 +18,9 @@
 #define LED_ON()              PA |= (1 << LED_PIN)
 #define LED_OFF()             PA &= ~(1 << LED_PIN)
 #define LED_TOGGLE()          PA ^= (1 << LED_PIN)
-#define MOTOR_ON()            PA |= (1 << MOTOR_PIN)
-#define MOTOR_OFF()           PA &= ~(1 << MOTOR_PIN)
+#define MOTOR_ON()            PA &= ~(1 << MOTOR_PIN)
+#define MOTOR_OFF()           PA |= (1 << MOTOR_PIN)
+
 
 // Toggle the motor on and off to give toy some character using profiles
 #define MAX_TICKS             64    /* go to sleep after this many ticks */
@@ -42,7 +43,9 @@ typedef enum {
   GOTO_SLEEP,                       /* prepare to sleep */
   SLEEP,                            /* toy is in deep sleep */
   WAKEUP,                           /* toy was awaken from deep sleep */
-  ACTIVE,                           /* toy is active, LED and motor on */
+  // ACTIVE,                           /* toy is active, LED and motor on */
+  TOCK,                             /* T16 calling for next profile point */
+  LIGHT_SLEEP,                      /* light sleep between ticks */
 } fsm_states_t;
 
 fsm_states_t fsm_state = GOTO_SLEEP;
@@ -68,10 +71,16 @@ void interrupt(void) __interrupt(0) {
   if (INTRQ & INTRQ_T16) {          /* timer has expired */
     INTRQ &= ~INTRQ_T16;            /* mark T16 interrupt request serviced */
     T16C = 0;                       /* reset timer to zero */
+    fsm_state = TOCK;               /* get next profile point */
   }
 
-  if (INTRQ & INTRQ_TM2) {          /* timer 2 delay has expired */
-    INTRQ &= ~INTRQ_TM2;            /* mark T2 interrupt request serviced */
+  if (INTRQ & INTRQ_TM3) {          /* LED toggle timer */
+    INTRQ &= ~INTRQ_TM3;            /* mark interrupt request serviced */
+    fsm_state = LIGHT_SLEEP;        /* go to light sleep */
+  }
+
+  if (INTRQ & INTRQ_TM3) {          /* settling delay has expired */
+    INTRQ &= ~INTRQ_TM3;            /* mark interrupt request serviced */
   }
 }
 
@@ -100,6 +109,7 @@ void main() {
         __disgint();                /* disable global interrupts */
         
         T16M = T16M_CLK_DISABLE;    /* turn off tick timer */
+        TM2C = TM2C_CLK_DISABLE;    /* stop LED toggling */
         LED_OFF();
         MOTOR_OFF();
 
@@ -134,11 +144,17 @@ void main() {
         INTEN |= INTEN_T16;         /* enable T16 interrupt */
         INTRQ = 0;                  /* reset interrupts */
 
+        TM2C = (uint8_t)(TM2C_CLK_ILRC | TM2C_OUT_PA3 | TM2C_MODE_PERIOD);
+                                    /* setup timer2 to toggle LED */
+        TM2S = (uint8_t)(TM2S_PRESCALE_DIV4 | TM2S_SCALE_DIV3);
+        TM2B = 250;                 /* set timer frequency to 6.8Hz */
+        INTEN |= INTEN_TM2;         /* enable timer2 interrupt */
+
         tick = 0;                   /* reset tick count to reset profile playback */
-        fsm_state = ACTIVE;
+        fsm_state = TOCK;           /* change state to set motor playback from profile */
         break;
       
-      case ACTIVE:
+      case TOCK:
         if (tick >= MAX_TICKS) {    /* done playing? time for sleep */
           profile_i++;              /* play next profile on wake */
           profile_i = (profile_i > (NUM_PROFILES - 1)) ? 0 : profile_i;
@@ -154,10 +170,13 @@ void main() {
           MOTOR_OFF();
         }
 
-        LED_TOGGLE();
-
         tick++;                     /* increment tick */
 
+        __engint();                 /* enable global interrupts */
+        __stopexe();                /* light sleep, ILRC remains on */
+        break;
+
+      case LIGHT_SLEEP:
         __engint();                 /* enable global interrupts */
         __stopexe();                /* light sleep, ILRC remains on */
         break;
