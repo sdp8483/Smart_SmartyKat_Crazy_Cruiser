@@ -47,7 +47,7 @@ typedef enum {
   LIGHT_SLEEP,                      /* light sleep between ticks */
 } fsm_states_t;
 
-fsm_states_t fsm_state = GOTO_SLEEP;
+volatile fsm_states_t fsm_state = GOTO_SLEEP;
 
 // Function Prototypes
 void settling_delay(void);          /* use timer3 as delay to wait for vibe sensor to settle */
@@ -73,8 +73,8 @@ void interrupt(void) __interrupt(0) {
     fsm_state = TOCK;               /* get next profile point */
   }
 
-  if (INTRQ & INTRQ_TM3) {          /* LED toggle timer */
-    INTRQ &= ~INTRQ_TM3;            /* mark interrupt request serviced */
+  if (INTRQ & INTRQ_TM2) {          /* LED toggle timer */
+    INTRQ &= ~INTRQ_TM2;            /* mark interrupt request serviced */
     fsm_state = LIGHT_SLEEP;        /* go to light sleep */
   }
 
@@ -154,6 +154,7 @@ void main() {
         break;
       
       case TOCK:
+        __disgint();                /* dont interrupt during tock */
         if (tick >= MAX_TICKS) {    /* done playing? time for sleep */
           profile_i++;              /* play next profile on wake */
           profile_i = (profile_i > (NUM_PROFILES - 1)) ? 0 : profile_i;
